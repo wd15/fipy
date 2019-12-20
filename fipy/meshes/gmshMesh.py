@@ -92,9 +92,17 @@ def gmshVersion(communicator=parallelComm):
 
 def _gmshVersion(communicator=parallelComm):
     version = gmshVersion(communicator) or "0.0"
-    return StrictVersion(version)
+    try:
+        version = StrictVersion(version)
+    except ValueError:
+        # gmsh returns the version string in stderr,
+        # which means it's often unparsable due to irrelevant warnings
+        # assume it's OK and move on
+        version = StrictVersion("3.0")
 
-def openMSHFile(name, dimensions=None, coordDimensions=None, communicator=parallelComm, order=1, mode='r', background=None):
+    return version
+
+def openMSHFile(name, dimensions=None, coordDimensions=None, communicator=parallelComm, overlap=1, mode='r', background=None):
     """Open a Gmsh `MSH` file
 
     Parameters
@@ -105,8 +113,12 @@ def openMSHFile(name, dimensions=None, coordDimensions=None, communicator=parall
         Dimension of mesh
     coordDimensions : int
         Dimension of shapes
-    order
-        ???
+    overlap : int
+        The number of overlapping cells for parallel
+        simulations. Generally 1 is adequate. Higher order equations or
+        discretizations require more. If `overlap` is greater than one,
+        commumication reverts to serial, as Gmsh only provides one layer
+        of ghost cells.
     mode : str
         Beginning with `r` for reading and `w` for writing.
         The file will be created if it doesn't exist when opened for writing;
@@ -116,7 +128,7 @@ def openMSHFile(name, dimensions=None, coordDimensions=None, communicator=parall
         Specifies the desired characteristic lengths of the mesh cells
     """
 
-    if order > 1:
+    if overlap > 1:
         communicator = serialComm
 
     # Enforce gmsh version to be either >= 2 or 2.5, based on Nproc.
@@ -1557,8 +1569,12 @@ class Gmsh2D(Mesh2D):
         Gmsh geometry (`.geo`) file, or (iii) a Gmsh geometry script
     coordDimensions : int
         Dimension of shapes
-    order
-        ???
+    overlap : int
+        The number of overlapping cells for parallel
+        simulations. Generally 1 is adequate. Higher order equations or
+        discretizations require more. If `overlap` is greater than one,
+        commumication reverts to serial, as Gmsh only provides one layer
+        of ghost cells.
     background : ~fipy.variables.cellVariable.CellVariable
         Specifies the desired characteristic lengths of the mesh cells
     """
@@ -1567,16 +1583,20 @@ class Gmsh2D(Mesh2D):
                  arg,
                  coordDimensions=2,
                  communicator=parallelComm,
-                 order=1,
+                 overlap=1,
                  background=None):
 
         self.mshFile = openMSHFile(arg,
                                    dimensions=2,
                                    coordDimensions=coordDimensions,
                                    communicator=communicator,
-                                   order=order,
+                                   overlap=overlap,
                                    mode='r',
                                    background=background)
+
+        # openMSHFile may have "downgraded" the communicator
+        # if, e.g., too many overlaps were requested
+        communicator = self.mshFile.communicator
 
         (verts,
          faces,
@@ -1856,17 +1876,21 @@ class Gmsh2DIn3DSpace(Gmsh2D):
         Gmsh geometry (`.geo`) file, or (iii) a Gmsh geometry script
     coordDimensions : int
         Dimension of shapes
-    order
-        ???
+    overlap : int
+        The number of overlapping cells for parallel
+        simulations. Generally 1 is adequate. Higher order equations or
+        discretizations require more. If `overlap` is greater than one,
+        commumication reverts to serial, as Gmsh only provides one layer
+        of ghost cells.
     background : ~fipy.variables.cellVariable.CellVariable
         Specifies the desired characteristic lengths of the mesh cells
     """
-    def __init__(self, arg, communicator=parallelComm, order=1, background=None):
+    def __init__(self, arg, communicator=parallelComm, overlap=1, background=None):
         Gmsh2D.__init__(self,
                         arg,
                         coordDimensions=3,
                         communicator=communicator,
-                        order=order,
+                        overlap=overlap,
                         background=background)
 
     def _test(self):
@@ -1934,18 +1958,26 @@ class Gmsh3D(Mesh):
     arg : str
         (i) the path to an `MSH` file, (ii) a path to a
         Gmsh geometry (`.geo`) file, or (iii) a Gmsh geometry script
-    order
-        ???
+    overlap : int
+        The number of overlapping cells for parallel
+        simulations. Generally 1 is adequate. Higher order equations or
+        discretizations require more. If `overlap` is greater than one,
+        commumication reverts to serial, as Gmsh only provides one layer
+        of ghost cells.
     background : ~fipy.variables.cellVariable.CellVariable
         Specifies the desired characteristic lengths of the mesh cells
     """
-    def __init__(self, arg, communicator=parallelComm, order=1, background=None):
+    def __init__(self, arg, communicator=parallelComm, overlap=1, background=None):
         self.mshFile  = openMSHFile(arg,
                                     dimensions=3,
                                     communicator=communicator,
-                                    order=order,
+                                    overlap=overlap,
                                     mode='r',
                                     background=background)
+
+        # openMSHFile may have "downgraded" the communicator
+        # if, e.g., too many overlaps were requested
+        communicator = self.mshFile.communicator
 
         (verts,
          faces,
@@ -2168,7 +2200,7 @@ class GmshGrid2D(Gmsh2D):
     """Should serve as a drop-in replacement for `Grid2D`
     """
     def __init__(self, dx=1., dy=1., nx=1, ny=None,
-                 coordDimensions=2, communicator=parallelComm, order=1):
+                 coordDimensions=2, communicator=parallelComm, overlap=1):
         self.dx = dx
         self.dy = dy or dx
         self.nx = nx
@@ -2176,7 +2208,7 @@ class GmshGrid2D(Gmsh2D):
 
         arg = self._makeGridGeo(self.dx, self.dy, self.nx, self.ny)
 
-        Gmsh2D.__init__(self, arg, coordDimensions, communicator, order, background=None)
+        Gmsh2D.__init__(self, arg, coordDimensions, communicator, overlap, background=None)
 
     @property
     def _meshSpacing(self):
@@ -2238,7 +2270,7 @@ class GmshGrid3D(Gmsh3D):
     """Should serve as a drop-in replacement for `Grid3D`
     """
     def __init__(self, dx=1., dy=1., dz=1., nx=1, ny=None, nz=None,
-                 communicator=parallelComm, order=1):
+                 communicator=parallelComm, overlap=1):
         self.dx = dx
         self.dy = dy or dx
         self.dz = dz or dx
@@ -2250,7 +2282,7 @@ class GmshGrid3D(Gmsh3D):
         arg = self._makeGridGeo(self.dx, self.dy, self.dz,
                                 self.nx, self.ny, self.nz)
 
-        Gmsh3D.__init__(self, arg, communicator=communicator, order=order)
+        Gmsh3D.__init__(self, arg, communicator=communicator, overlap=overlap)
 
     @property
     def _meshSpacing(self):
