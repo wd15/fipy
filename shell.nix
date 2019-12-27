@@ -11,6 +11,27 @@ let
       jupyter nbextension enable widgetsnbextension --user --py
     '' else "";
     filter_pyamg = builtins.filter (x: ! ((pkgs.lib.hasInfix "pyamg" x.name) && pkgs.stdenv.isDarwin));
+    petsc4py = pythonPackages.buildPythonPackage rec {
+      pname = "petsc4py";
+      version = "3.8.1";
+      src = pythonPackages.fetchPypi {
+        inherit pname version;
+        sha256 = "14iw9wmr2d1zs99yhnkm3g2fqqcbybbm42wxscqn1ifx6wrjrdyp";
+      };
+      preConfigure = ''
+        export PETSC_DIR="${pkgs.petsc.out}";
+      '';
+      doCheck = false;
+      buildInputs = with pythonPackages; [
+        cython
+        # petsc
+        pkgs.openmpi
+        pkgs.hdf5
+        pkgs.petsc
+        mpi4py
+        numpy
+      ];
+    };
 in
   (pythonPackages.fipy.overridePythonAttrs (old: rec {
     src = builtins.filterSource (path: type: type != "directory" || baseNameOf path != ".git") ./.;
@@ -18,6 +39,8 @@ in
       pip
       pkgs.imagemagick
       pkgs.git
+      pkgs.petsc
+      petsc4py
     ] ++ propagatedBuildInputs ++ not_darwin_inputs;
 
     propagatedBuildInputs = (filter_pyamg old.propagatedBuildInputs);
@@ -39,5 +62,8 @@ in
 
       ## To build PyAMG add nixpkgs.gcc to nativeBuildInputs and then
       # pip install --user pyamg
+      # export LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH
+      export OMPI_MCA_plm_rsh_agent=/usr/bin/ssh
+
     '';
   }))
