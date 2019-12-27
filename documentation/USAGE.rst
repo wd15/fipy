@@ -196,9 +196,10 @@ package.
 
    If present, causes the graphical display of the solution matrix of each
    equation at each call of :meth:`~Term.solve` or :meth:`~Term.sweep`.
-   Setting the value to "``terms``," causes the display of the matrix for each
+   Setting the value to "``terms``" causes the display of the matrix for each
    :class:`Term` that composes the equation. Requires the :term:`Matplotlib`
-   package.
+   package. Setting the value to "``print``" causes the matrix to be
+   printed to the console.
 
 .. envvar:: FIPY_INLINE
 
@@ -247,7 +248,7 @@ package.
 Solving in Parallel
 -------------------
 
-:term:`FiPy` can use :term:`Trilinos` to solve equations in
+:term:`FiPy` can use :ref:`PETSC` or :ref:`TRILINOS` to solve equations in
 parallel. Most mesh classes in :mod:`fipy.meshes` can solve in
 parallel. This includes all "``...Grid...``" and "``...Gmsh...``"
 class meshes. Currently, the only remaining serial-only meshes are
@@ -256,30 +257,29 @@ class meshes. Currently, the only remaining serial-only meshes are
 
 .. attention::
 
-   :term:`Trilinos` *must* be compiled with MPI_ support.
-
-.. attention::
-
-   :term:`FiPy` requires :ref:`MPI4PY` to work in parallel. See the
-   :ref:`MPI4PY` installation guide.
+   :term:`FiPy` requires :term:`mpi4py` to work in parallel.
 
 .. tip::
 
-   You are strongly advised to force the use of only one OpenMP_ thread::
+   You are strongly advised to force the use of only one :ref:`OpenMP` thread::
 
        $ export OMP_NUM_THREADS=1
 
    See :ref:`THREADS_VS_RANKS` for more information.
 
-.. tip::
+.. note::
 
-   Parallel efficiency is greatly improved by installing
-   :term:`Pysparse` in addition to :term:`Trilinos`. If
-   :term:`Pysparse` is not installed be sure to use the
-   ``--no-pysparse`` flag when running in parallel.
+   `Trilinos 12.12 has support for Python 3`_, but
+   `PyTrilinos on conda-forge`_ presently only provides 12.10, which is
+   limited to Python 2.x. :ref:`PETSC` is available for both :term:`Python
+   3` and :term:`Python` 2.7.
 
 It should not generally be necessary to change anything in your script.
 Simply invoke::
+
+    $ mpirun -np {# of processors} python myScript.py --petsc
+
+or::
 
     $ mpirun -np {# of processors} python myScript.py --trilinos
 
@@ -287,9 +287,8 @@ instead of::
 
     $ python myScript.py
 
-To confirm that :term:`FiPy` and :term:`Trilinos` are properly configured
-to solve in parallel, the easiest way to tell is to run one of the
-examples, e.g.,::
+To confirm that :term:`FiPy` is properly configured to solve in parallel,
+the easiest way to tell is to run one of the examples, e.g.,::
 
     $ mpirun -np 2 examples/diffusion/mesh1D.py
 
@@ -302,29 +301,31 @@ sure, you can run a diagnostic script::
 
 which should print out::
 
-    mpi4py: processor 0 of 3 :: PyTrilinos: processor 0 of 3 :: FiPy: 5 cells on processor 0 of 3
-    mpi4py: processor 1 of 3 :: PyTrilinos: processor 1 of 3 :: FiPy: 7 cells on processor 1 of 3
-    mpi4py: processor 2 of 3 :: PyTrilinos: processor 2 of 3 :: FiPy: 6 cells on processor 2 of 3
+         mpi4py            PyTrilinos           petsc4py                   FiPy            
+    processor 0 of 3 :: processor 0 of 3 :: processor 0 of 3 :: 5 cells on processor 0 of 3
+    processor 1 of 3 :: processor 1 of 3 :: processor 1 of 3 :: 7 cells on processor 1 of 3
+    processor 2 of 3 :: processor 2 of 3 :: processor 2 of 3 :: 6 cells on processor 2 of 3
 
 If there is a problem with your parallel environment, it should be clear
 that there is either a problem importing one of the required packages or
-that there is some problem with the MPI environment. For example::
+that there is some problem with the :ref:`MPI` environment. For example::
 
-    mpi4py: processor 2 of 3 :: PyTrilinos: processor 0 of 1 :: FiPy: 10 cells on processor 0 of 1
+         mpi4py            PyTrilinos           petsc4py                   FiPy            
+    processor 0 of 3 :: processor 0 of 3 :: processor 0 of 3 :: 10 cells on processor 0 of 1
     [my.machine.com:69815] WARNING: There were 4 Windows created but not freed.
-    mpi4py: processor 1 of 3 :: PyTrilinos: processor 0 of 1 :: FiPy: 10 cells on processor 0 of 1
+    processor 1 of 3 :: processor 1 of 3 :: processor 1 of 3 :: 10 cells on processor 0 of 1
     [my.machine.com:69814] WARNING: There were 4 Windows created but not freed.
-    mpi4py: processor 0 of 3 :: PyTrilinos: processor 0 of 1 :: FiPy: 10 cells on processor 0 of 1
+    processor 2 of 3 :: processor 2 of 3 :: processor 2 of 3 :: 10 cells on processor 0 of 1
     [my.machine.com:69813] WARNING: There were 4 Windows created but not freed.
 
-indicates :ref:`MPI4PY` is properly communicating with MPI and is running
+indicates :term:`mpi4py` is properly communicating with :ref:`MPI` and is running
 in parallel, but that :ref:`TRILINOS` is not, and is running three separate
 serial environments. As a result, :term:`FiPy` is limited to three separate
 serial operations, too. In this instance, the problem is that although
-:ref:`TRILINOS` was compiled with MPI enabled, it was compiled against a
-different MPI library than is currently available (and which :ref:`MPI4PY`
+:ref:`TRILINOS` was compiled with :ref:`MPI` enabled, it was compiled against a
+different :ref:`MPI` library than is currently available (and which :term:`mpi4py`
 was compiled against). The solution is to rebuild :ref:`TRILINOS` against
-the active MPI libraries.
+the active :ref:`MPI` libraries.
 
 When solving in parallel, :term:`FiPy` essentially breaks the problem
 up into separate sub-domains and solves them (somewhat) independently.
@@ -332,47 +333,28 @@ up into separate sub-domains and solves them (somewhat) independently.
 you need to do something with the entire solution, you can use
 ``var.``:attr:`~fipy.variables.cellVariable.CellVariable.globalValue`.
 
-.. note::
+.. note:: One option for debugging in parallel is::
 
-    :term:`Trilinos` solvers frequently give intermediate output that
-    :term:`FiPy` cannot suppress. The most commonly encountered
-    messages are
+   $ mpirun -np {# of processors} xterm -hold -e "python -m ipdb myScript.py"
 
-     ``Gen_Prolongator warning : Max eigen <= 0.0``
-        which is not significant to :term:`FiPy`.
-
-     ``Aztec status AZ_loss: loss of precision``
-        which indicates that there was some difficulty in solving the
-        problem to the requested tolerance due to precision limitations,
-        but usually does not prevent the solver from finding an adequate
-        solution.
-
-     ``Aztec status AZ_ill_cond: GMRES hessenberg ill-conditioned``
-        which indicates that GMRES is having trouble with the problem, and
-        may indicate that trying a different solver or preconditioner may
-        give more accurate results if GMRES fails.
-
-     ``Aztec status AZ_breakdown: numerical breakdown``
-        which usually indicates serious problems solving the equation which
-        forced the solver to stop before reaching an adequate solution.
-        Different solvers, different preconditioners, or a less restrictive
-        tolerance may help.
+.. _Trilinos 12.12 has support for Python 3 : https://github.com/trilinos/Trilinos/issues/3203
+.. _PyTrilinos on conda-forge: https://anaconda.org/conda-forge/pytrilinos
 
 .. _THREADS_VS_RANKS:
 
 OpenMP Threads vs. MPI Ranks
 ============================
 
-By default, Trilinos spawns as many OpenMP_ threads as there are cores
+By default, :ref:`Trilinos` spawns as many :ref:`OpenMP` threads as there are cores
 available.  This may very well be an intentional optimization, where
-Trilinos is designed to have one MPI_ rank per node of a cluster, so each
+Trilinos is designed to have one :ref:`MPI` rank per node of a cluster, so each
 of the child threads would help with computation but would not compete for
 I/O resources during ghost cell exchanges and file I/O. However, Python's
 `Global Interpreter Lock`_ (GIL) binds all of the child threads to the same
 core as their parent!  So instead of improving performance, each core
 suffers a heavy overhead from the managing those idling threads.
 
-The solution to this is to force Trilinos to use only one OpenMP_ thread::
+The solution to this is to force Trilinos to use only one :ref:`OpenMP` thread::
 
    $ export OMP_NUM_THREADS=1
 
@@ -383,30 +365,29 @@ current session, you may prefer to restrict its use to :term:`FiPy` runs::
 
 The difference can be extreme.  We have observed the :term:`FiPy` test
 suite to run in `just over two minutes`_ when ``OMP_NUM_THREADS=1``,
-compared to `over an hour and 23 minutes`_ when OpenMP_ threads are
+compared to `over an hour and 23 minutes`_ when :ref:`OpenMP` threads are
 unrestricted. We don't know why, but `other platforms`_ do not suffer the
 same degree of degradation.
 
-Conceivably, allowing Trilinos unfettered access to OpenMP_ threads with no
-MPI_ communication at all could perform as well or better than purely MPI_
+Conceivably, allowing Trilinos unfettered access to :ref:`OpenMP` threads with no
+:ref:`MPI` communication at all could perform as well or better than
+purely :ref:`MPI`
 parallelization.  The plot below demonstrates this is not the case.  We
-compare solution time vs number of OpenMP_ threads for fixed number of
+compare solution time vs number of :ref:`OpenMP` threads for fixed number of
 slots for a `Method of Manufactured Solutions Allen-Cahn problem`_.
-OpenMP_ threading always slows down FiPy performance.
+:ref:`OpenMP` threading always slows down FiPy performance.
 
 .. plot:: documentation/pyplots/threadanalyze.py
 
-   OpenMP_ threads :math:`\times` MPI_ cpus = slots.
+   :ref:`OpenMP` threads :math:`\times` :ref:`MPI` cpus = slots.
 
 See https://www.mail-archive.com/fipy@nist.gov/msg03393.html for further
 analysis.
 
-It may be possible to configure PyTrilinos to use only one OpenMP_ thread,
+It may be possible to configure PyTrilinos to use only one :ref:`OpenMP` thread,
 but this is not the configuration of the version available from conda-forge_
 and building Trilinos is |NotFun (TM)|_.
 
-.. _OpenMP:                      https://www.openmp.org
-.. _MPI:                         http://www.mpi-forum.org
 .. _Global Interpreter Lock:     https://docs.python.org/2.7/c-api/init.html#thread-state-and-the-global-interpreter-lock
 .. _just over two minutes:       https://circleci.com/gh/guyer/fipy/461
 .. _over an hour and 23 minutes: https://circleci.com/gh/guyer/fipy/423
