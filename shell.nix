@@ -11,12 +11,23 @@ let
       jupyter nbextension enable widgetsnbextension --user --py
     '' else "";
     filter_pyamg = builtins.filter (x: ! ((pkgs.lib.hasInfix "pyamg" x.name) && pkgs.stdenv.isDarwin));
+
+    petsc = (pkgs.petsc.overrideAttrs (oldAttrs: rec {
+      version = "3.12.0";
+      src = pkgs.fetchurl {
+       url = "http://ftp.mcs.anl.gov/pub/petsc/release-snapshots/petsc-${version}.tar.gz";
+       sha256 = "056byzpnvd3bm9sagyfmlavhkgrq9cfxv48wpl2vyziwg1lwz7ms";
+      };
+      postInstall = ''
+      '';
+    }));
+
     petsc4py = pythonPackages.buildPythonPackage rec {
       pname = "petsc4py";
-      version = "3.8.1";
+      version = "3.12.0";
       src = pythonPackages.fetchPypi {
         inherit pname version;
-        sha256 = "14iw9wmr2d1zs99yhnkm3g2fqqcbybbm42wxscqn1ifx6wrjrdyp";
+        sha256 = "1bddgzqqhxrg12hkgf7n5i2j1vqh0sn2949rpym86xf26q1zl0hs";
       };
       preConfigure = ''
         export PETSC_DIR="${pkgs.petsc.out}";
@@ -27,7 +38,7 @@ let
         # petsc
         pkgs.openmpi
         pkgs.hdf5
-        pkgs.petsc
+        petsc
         mpi4py
         numpy
       ];
@@ -39,7 +50,7 @@ in
       pip
       pkgs.imagemagick
       pkgs.git
-      pkgs.petsc
+      petsc
       petsc4py
     ] ++ propagatedBuildInputs ++ not_darwin_inputs;
 
