@@ -157,6 +157,9 @@ class _AbstractConvectionTerm(FaceTerm):
 
     def _buildMatrix(self, var, SparseMatrix, boundaryConditions=(), dt=None, transientGeomCoeff=None, diffusionGeomCoeff=None):
 
+
+
+
         var, L, b = FaceTerm._buildMatrix(self, var, SparseMatrix, boundaryConditions=boundaryConditions, dt=dt, transientGeomCoeff=transientGeomCoeff, diffusionGeomCoeff=diffusionGeomCoeff)
 
 ##        if var.rank != 1:
@@ -174,10 +177,15 @@ class _AbstractConvectionTerm(FaceTerm):
             else:
                 alpha = 0.0
 
+            alpha_ = numerix.where(var.arithmeticFaceValue.constraintMask, 0.0, alpha)
+            alpha_ = numerix.where(var.faceGrad.constraintMask, 1.0, alpha)
+
             exteriorCoeff =  self.coeff * mesh.exteriorFaces
 
-            self.constraintL = (alpha * constraintMask * exteriorCoeff).divergence * mesh.cellVolumes
-            self.constraintB =  -((1 - alpha) * var.arithmeticFaceValue * constraintMask * exteriorCoeff).divergence * mesh.cellVolumes
+            self.constraintL = (alpha_ * constraintMask * exteriorCoeff).divergence * mesh.cellVolumes
+            self.constraintB =  -((1 - alpha_) * var.arithmeticFaceValue * constraintMask * exteriorCoeff).divergence * mesh.cellVolumes
+            dvar = (var.faceGrad * mesh._cellDistances * mesh.faceNormals).sum(axis=0)
+            self.constraintB +=  -((1 - alpha) * dvar * var.faceGrad.constraintMask * exteriorCoeff).divergence * mesh.cellVolumes
 
         ids = self._reshapeIDs(var, numerix.arange(mesh.numberOfCells))
         L.addAt(numerix.array(self.constraintL).ravel(), ids.ravel(), ids.swapaxes(0, 1).ravel())
@@ -197,5 +205,3 @@ def _test():
 
 if __name__ == "__main__":
     _test()
-
-
