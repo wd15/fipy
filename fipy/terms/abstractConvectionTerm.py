@@ -193,6 +193,56 @@ class _AbstractConvectionTerm(FaceTerm):
 
         return (var, L, b)
 
+
+    def _test(self):
+        """Test cases for convection with constraints.
+
+        The following tests both a Dirichlet and a Nuemann type
+        boundary condition with convection using constraints. This
+        tests that the Nuemann boundary condition converges without
+        multiple iterations of the solve step. The Dirichlet boundary
+        condition is second order accurate. The Nuemann is only first
+        order accurate.
+
+        >>> import fipy as fp
+        >>> import numpy as np
+
+        >>> def solve(nx, constrain_right):
+        ...     var = fp.CellVariable(fp.Grid1D(nx=nx, dx=1. / nx))
+        ...     var.constrain(1.0, var.mesh.facesLeft)
+        ...     constrain_right(var)
+        ...     (fp.CentralDifferenceConvectionTerm((1.0,)) - fp.DiffusionTerm() == 0).sweep(var)
+        ...     return var
+
+        >>> def error(nx, constrain_right, expected):
+        ...     var = solve(nx, constrain_right)
+        ...     return np.sqrt((abs(var.value - expected(var))**2 * var.mesh.dx).sum())
+
+        >>> def error_dirichlet(nx):
+        ...     return error(
+        ...         nx,
+        ...         lambda v: v.constrain(0.0, v.mesh.facesRight),
+        ...         lambda v: (np.exp(v.mesh.x) - np.exp(1.)) / (1 - np.exp(1.))
+        ...     )
+
+        >>> def error_neumann(nx, dphi=1.0):
+        ...     return error(
+        ...         nx,
+        ...         lambda v: v.faceGrad.constrain([dphi], v.mesh.facesRight),
+        ...         lambda v: 1 + dphi * (np.exp(v.mesh.x) - 1) / np.exp(1.)
+        ...     )
+
+        >>> def slope(ferror, nx0, nx1):
+        ...     return np.log(ferror(nx1) / ferror(nx0)) / np.log(nx0 / nx1)
+
+        >>> assert np.allclose(slope(error_dirichlet, 64, 128), 2.0, atol=0.02)
+        >>> assert np.allclose(slope(error_neumann, 64, 128), 1.0, atol=0.002)
+
+        """
+
+
+
+
 class __ConvectionTerm(_AbstractConvectionTerm):
     """
     Dummy subclass for tests
