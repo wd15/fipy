@@ -172,7 +172,6 @@ class _AbstractConvectionTerm(FaceTerm):
             else:
                 alpha = 0.0
 
-            alpha_constraint = numerix.where(var.arithmeticFaceValue.constraintMask, 0.0, alpha)
             alpha_constraint = numerix.where(var.faceGrad.constraintMask, 1.0, alpha)
 
             def divergence(face_value):
@@ -187,7 +186,6 @@ class _AbstractConvectionTerm(FaceTerm):
             self.constraintB = divergence(
                 (alpha_constraint - 1) * var.arithmeticFaceValue + (alpha - 1)  * dvar * var.faceGrad.constraintMask
             )
-
 
         ids = self._reshapeIDs(var, numerix.arange(mesh.numberOfCells))
         L.addAt(numerix.array(self.constraintL).ravel(), ids.ravel(), ids.swapaxes(0, 1).ravel())
@@ -204,41 +202,65 @@ class _AbstractConvectionTerm(FaceTerm):
         tests that the Nuemann boundary condition converges without
         multiple iterations of the solve step. The Dirichlet boundary
         condition is second order accurate. The Nuemann is only first
-        order accurate.
+        order accurate. These tests were prompted by
+        https://github.com/usnistgov/fipy/pull/714.
 
         >>> import fipy as fp
         >>> import numpy as np
 
-        >>> def solve(nx, constrain_right):
-        ...     var = fp.CellVariable(fp.Grid1D(nx=nx, dx=1. / nx))
-        ...     var.constrain(1.0, var.mesh.facesLeft)
-        ...     constrain_right(var)
-        ...     (fp.CentralDifferenceConvectionTerm((1.0,)) - fp.DiffusionTerm() == 0).sweep(var)
-        ...     return var
+        Test Dirichlet boundary condition with a fixed value on the
+        left and a fixed value on the right. Check that the order of
+        accuracy is 2.
 
-        >>> def error(nx, constrain_right, expected):
-        ...     var = solve(nx, constrain_right)
-        ...     return np.sqrt((abs(var.value - expected(var))**2 * var.mesh.dx).sum())
+        >>> nx0 = 64
+        >>> mesh = fp.Grid1D(nx=nx0, dx=1. / nx0)
+        >>> var = fp.CellVariable(mesh)
+        >>> var.constrain(1.0, mesh.facesLeft)
+        >>> var.constrain(0.0, mesh.facesRight)
+        >>> eqn = fp.CentralDifferenceConvectionTerm((1.0,)) - fp.DiffusionTerm()
+        >>> _ = eqn.sweep(var)
+        >>> expected =  (np.exp(mesh.x) - np.exp(1.)) / (1 - np.exp(1.))
+        >>> error0 = float(np.sqrt(((var.value - expected)**2 * mesh.dx).sum()))
 
-        >>> def error_dirichlet(nx):
-        ...     return error(
-        ...         nx,
-        ...         lambda v: v.constrain(0.0, v.mesh.facesRight),
-        ...         lambda v: (np.exp(v.mesh.x) - np.exp(1.)) / (1 - np.exp(1.))
-        ...     )
+        >>> nx1 = 128
+        >>> mesh = fp.Grid1D(nx=nx1, dx=1. / nx1)
+        >>> var = fp.CellVariable(mesh)
+        >>> var.constrain(1.0, mesh.facesLeft)
+        >>> var.constrain(0.0, mesh.facesRight)
+        >>> eqn = fp.CentralDifferenceConvectionTerm((1.0,)) - fp.DiffusionTerm()
+        >>> _ = eqn.sweep(var)
+        >>> expected =  (np.exp(mesh.x) - np.exp(1.)) / (1 - np.exp(1.))
+        >>> error1 = float(np.sqrt(((var.value - expected)**2 * mesh.dx).sum()))
 
-        >>> def error_neumann(nx, dphi=1.0):
-        ...     return error(
-        ...         nx,
-        ...         lambda v: v.faceGrad.constrain([dphi], v.mesh.facesRight),
-        ...         lambda v: 1 + dphi * (np.exp(v.mesh.x) - 1) / np.exp(1.)
-        ...     )
+        >>> assert np.allclose(np.log(error1 / error0 )/ np.log(nx0 / nx1), 2.0, atol=0.02)
 
-        >>> def slope(ferror, nx0, nx1):
-        ...     return np.log(ferror(nx1) / ferror(nx0)) / np.log(nx0 / nx1)
+        Test Nuemann boundary condition with a fixed value on the left
+        and a gradient on the right. Check that the order of accuracy
+        is 1.
 
-        >>> assert np.allclose(slope(error_dirichlet, 64, 128), 2.0, atol=0.02)
-        >>> assert np.allclose(slope(error_neumann, 64, 128), 1.0, atol=0.002)
+        >>> dphi = 1.0
+
+        >>> nx0 = 64
+        >>> mesh = fp.Grid1D(nx=nx0, dx=1. / nx0)
+        >>> var = fp.CellVariable(mesh)
+        >>> var.constrain(1.0, mesh.facesLeft)
+        >>> _  = var.faceGrad.constrain([dphi], mesh.facesRight),
+        >>> eqn = fp.CentralDifferenceConvectionTerm((1.0,)) - fp.DiffusionTerm()
+        >>> _ = eqn.sweep(var)
+        >>> expected = 1 + dphi * (np.exp(mesh.x) - 1) / np.exp(1.)
+        >>> error0 = float(np.sqrt(((var.value - expected)**2 * mesh.dx).sum()))
+
+        >>> nx1 = 128
+        >>> mesh = fp.Grid1D(nx=nx1, dx=1. / nx1)
+        >>> var = fp.CellVariable(mesh)
+        >>> var.constrain(1.0, mesh.facesLeft)
+        >>> _ = var.faceGrad.constrain([dphi], mesh.facesRight),
+        >>> eqn = fp.CentralDifferenceConvectionTerm((1.0,)) - fp.DiffusionTerm()
+        >>> _ = eqn.sweep(var)
+        >>> expected = 1 + dphi * (np.exp(mesh.x) - 1) / np.exp(1.)
+        >>> error1 = float(np.sqrt(((var.value - expected)**2 * mesh.dx).sum()))
+
+        >>> assert np.allclose(np.log(error1 / error0 )/ np.log(nx0 / nx1), 1.0, atol=0.002)
 
         """
 
