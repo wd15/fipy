@@ -157,6 +157,9 @@ class _AbstractConvectionTerm(FaceTerm):
 
     def _buildMatrix(self, var, SparseMatrix, boundaryConditions=(), dt=None, transientGeomCoeff=None, diffusionGeomCoeff=None):
 
+
+
+
         var, L, b = FaceTerm._buildMatrix(self, var, SparseMatrix, boundaryConditions=boundaryConditions, dt=dt, transientGeomCoeff=transientGeomCoeff, diffusionGeomCoeff=diffusionGeomCoeff)
 
 ##        if var.rank != 1:
@@ -171,6 +174,7 @@ class _AbstractConvectionTerm(FaceTerm):
                 alpha = weight['implicit']['cell 1 diag']
             else:
                 alpha = 0.0
+
 
             alpha_constraint = numerix.where(var.faceGrad.constraintMask, 1.0, alpha)
 
@@ -204,6 +208,7 @@ class _AbstractConvectionTerm(FaceTerm):
         condition is second order accurate. The Nuemann is only first
         order accurate. These tests were prompted by
         https://github.com/usnistgov/fipy/pull/714.
+
 
         >>> import fipy as fp
         >>> import numpy as np
@@ -263,6 +268,7 @@ class _AbstractConvectionTerm(FaceTerm):
         >>> assert np.allclose(np.log(error1 / error0 )/ np.log(nx0 / nx1), 1.0, atol=0.002)
 
         """
+
 
 class __ConvectionTerm(_AbstractConvectionTerm):
     """
